@@ -1,334 +1,98 @@
-# 🚀 ZKP Voting System - Complete Setup & Testing Guide
+# Testing Guide
 
-## 📋 What We've Built
+All commands run from the project root (`voting_major/`) unless noted.
 
-```
-Full-Stack Architecture:
-Frontend (Vote.jsx)
-    ↓ (ZKP proof)
-Backend (Express)
-    ↓ (verify proof + send vote)
-Smart Contract (Solidity)
-    ↓
-Blockchain (Hardhat Local)
-```
-
----
-
-## 🎯 STEP-BY-STEP EXECUTION
-
-### **TERMINAL 1: Start Local Blockchain Node**
+## 1. Automated tests
 
 ```bash
-cd c:\Users\Ananya\voting_major
-
-npx hardhat node
+npm test
 ```
 
-**Expected Output:**
-```
-Started HTTP and WebSocket JSON-RPC server at http://127.0.0.1:8545/
+Runs against an in-process Hardhat chain with real proofs (circuit artifacts
+required: `npm run circuit:build`).
 
-Accounts:
-(0) 0x1234... (10000 ETH)
-(1) 0x5678... (10000 ETH)
-...
-```
+`test/Voting.test.js` – circuit and contract:
 
-✅ **Keep this terminal running!**
+- the circuit exposes only `[root, nullifier, electionId, candidateCount, vote]`
+- out-of-range votes and unregistered secrets cannot produce a proof
+- a valid vote is counted for the candidate inside the proof
+- duplicate nullifier, tampered vote signal and foreign Merkle root are rejected
+- votes are rejected in every phase except `voting`
+- phases only move forward; the root is set once and can never change; admin
+  functions are owner-only
 
----
+`test/Backend.test.js` – the real Express app against the contract:
 
-### **TERMINAL 2: Deploy Smart Contract**
+- codes go only to the email on the roll; unknown voter IDs get an identical answer
+- code cooldown, 5-attempt lockout, single-use tokens, per-IP rate limit
+- only valid, unique commitments are stored; re-registration replaces and notifies
+- every registration step is refused once registration is closed
+- end to end: register → close → open → vote → duplicate rejected → end
+- **privacy:** no file the server wrote and no email it sent contains a voter's
+  secret in any encoding
+- admin portal: no access without a session, the admin header or the right
+  password; login rate limit; disabled until a password is set
+- admin portal: adding voters is all-or-nothing; resets only before voting opens
+- admin portal: close → open → vote → end in order; a roll change after
+  publication stops `open` and republishes; phase controls stay off without the
+  owner key; every action lands in the activity log
+
+## 2. Manual end-to-end (UI)
 
 ```bash
-cd c:\Users\Ananya\voting_major
-
-npx hardhat run scripts/deploy.js --network localhost
+npm run node                                  # terminal 1
+npm run deploy                                # terminal 2
+npm run voter:add -- you@example.com
+cd backend && npm start                       # terminal 3
+cd client && npm run dev                      # terminal 4
 ```
 
-**Expected Output:**
-```
-============================================================
-🚀 DEPLOYING VOTING SMART CONTRACT
-============================================================
+1. Open http://localhost:5173 → **Register to Vote** → enter `VOTER-0001`.
+2. Without SMTP configured, the 6-digit code is printed in the backend terminal.
+3. Enter the code. Download or copy the credential, then type it back to confirm.
+4. `npm run election:close-registration`, then `npm run election:open`.
+5. Reload the home page → **Cast Your Vote** → paste the credential (or load
+   the downloaded file) → choose a candidate.
+6. Voting again with the same credential shows "Vote Already Submitted".
 
-📦 Contract factory loaded
-⏳ Deploying to local network...
-📝 Deployment transaction: 0x...
-✅ Contract deployed successfully!
-📍 Contract Address: 0x5f...
+## 3. Manual end-to-end (API)
 
-💾 Contract data saved to: contractAddress.json
-📄 Contract ABI saved to: contracts/Voting.abi.json
-
-============================================================
-✨ DEPLOYMENT COMPLETE!
-============================================================
-
-📋 Next steps:
-
-1. In a NEW terminal, start the backend:
-   cd backend
-   npm start
-
-2. Keep the hardhat node running
-3. Test the voting system
-```
-
-✅ **Contract is now deployed!** Copy the contract address for reference.
-
----
-
-### **TERMINAL 3: Start Backend Server**
+With voting open, generate a proof from a registered credential:
 
 ```bash
-cd c:\Users\Ananya\voting_major\backend
-
-npm start
+npm run proof:generate -- <credential> 2
 ```
 
-**Expected Output:**
-```
-🚀 Starting voting backend server...
-
-✅ Connected to local Hardhat network
-📝 Signer account: 0x1234...
-✅ Contract found at: 0x5f...
-🎉 Blockchain connection ready!
-
-🌐 Backend server running on http://localhost:3000
-📌 Endpoints:
-   POST /vote       - Submit a vote
-   GET  /results    - Get election results
-   GET  /status     - Server status
-```
-
-✅ **Backend is running and connected to blockchain!**
-
----
-
-## 🧪 TEST THE SYSTEM
-
-### **Test 1: Check Backend Status**
+This writes `build/vote-request.json`. Then:
 
 ```bash
-curl http://localhost:3000/status
-```
+curl http://localhost:3000/election
 
-**Response:**
-```json
-{
-  "status": "running",
-  "blockchain": "connected",
-  "contract": "0x5f..."
-}
-```
+# valid vote -> success, candidate 2
+curl -X POST http://localhost:3000/vote -H "Content-Type: application/json" -d @build/vote-request.json
 
----
+# same request again -> 409 DUPLICATE_VOTE
+curl -X POST http://localhost:3000/vote -H "Content-Type: application/json" -d @build/vote-request.json
 
-### **Test 2: Generate ZKP Proof**
-
-```bash
-cd c:\Users\Ananya\voting_major
-
-node scripts/generateInput.js
-```
-
-This creates:
-- `build/input.json` - Witness inputs
-- `build/witness.wtns` - Witness file
-- `build/proof.json` - Generated proof
-- `build/public.json` - Public signals
-
----
-
-### **Test 3: Submit Vote**
-
-In TERMINAL 4:
-
-```bash
-curl -X POST http://localhost:3000/vote \
-  -H "Content-Type: application/json" \
-  -d @build/proof.json
-```
-
-**Expected Output from Backend:**
-```
-📥 Vote request received
-   Candidate: 2
-🔐 Verifying zero-knowledge proof...
-✅ Proof verified successfully
-🔑 Nullifier: 0x1234...
-🔍 Checking if nullifier was already used...
-✅ Nullifier not used before
-🚀 Sending vote to smart contract...
-📤 Transaction sent: 0xabcd...
-⏳ Waiting for confirmation...
-✅ Vote recorded on blockchain!
-   Block: 5
-   Gas used: 85000
-📊 Fetching updated results...
-📈 Results: {
-  candidate1: "0",
-  candidate2: "1",
-  candidate3: "0",
-  total: "1"
-}
-✅ Vote processed successfully
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Vote recorded on blockchain successfully",
-  "transactionHash": "0xabcd...",
-  "blockNumber": 5,
-  "votes": {
-    "candidate1": "0",
-    "candidate2": "1",
-    "candidate3": "0",
-    "total": "1"
-  }
-}
-```
-
----
-
-### **Test 4: Check Results**
-
-```bash
 curl http://localhost:3000/results
 ```
 
-**Response:**
-```json
-{
-  "candidate1": "0",
-  "candidate2": "1",
-  "candidate3": "0",
-  "total": "1"
-}
-```
+Tampering check: edit `publicSignals[4]` (the vote) in
+`build/vote-request.json` and resend → `400 INVALID_PROOF`.
 
----
+## Troubleshooting
 
-### **Test 5: Try Duplicate Vote (should fail)**
-
-Submit the same proof again:
-
-```bash
-curl -X POST http://localhost:3000/vote \
-  -H "Content-Type: application/json" \
-  -d @build/proof.json
-```
-
-**Expected Response:**
-```json
-{
-  "success": false,
-  "message": "Duplicate vote - this voter has already voted"
-}
-```
-
-✅ **Double vote prevention working!**
-
----
-
-## 🔄 Complete Flow Summary
-
-```
-1. Frontend/Script generates ZKP proof
-   ↓
-2. Proof sent to Backend
-   ↓
-3. Backend verifies ZKP (snarkjs)
-   ↓
-4. Backend checks nullifier (not used?)
-   ↓
-5. Backend sends vote + nullifier to Smart Contract
-   ↓
-6. Smart Contract:
-   - Checks if nullifier already used
-   - Stores vote count
-   - Records transaction on blockchain
-   ↓
-7. Vote persisted permanently ✅
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### **Error: "Cannot connect to Hardhat node"**
-- Make sure Terminal 1 is running: `npx hardhat node`
-
-### **Error: "contractAddress.json not found"**
-- Make sure you ran: `npx hardhat run scripts/deploy.js --network localhost`
-
-### **Error: "Invalid proof"**
-- Make sure you generated fresh proof: `node scripts/generateInput.js`
-
-### **Error: "ECONNREFUSED 127.0.0.1:8545"**
-- Hardhat node not running. Start Terminal 1 again.
-
----
-
-## 📊 What's Happening Behind the Scenes
-
-### **Zero-Knowledge Proof Flow:**
-```
-Secret (private)
-    ↓ (Poseidon hash)
-Commitment → Merkle Tree
-    ↓
-Proof: "I'm in tree without revealing identity" ✅
-    ↓
-Nullifier: hash(secret, electionId)
-    ↓
-Smart Contract: "Did you already vote?" (via nullifier)
-```
-
-### **Blockchain Recording:**
-```
-Vote stored in mapping:
-  nullifierUsed[bytes32] = true
-  votes[candidateId]++
-
-Event emitted:
-  VoteCast(candidate, nullifier, timestamp)
-
-Transaction:
-  Block #5, Gas: 85,000
-  Permanent on blockchain ✓
-```
-
----
-
-## ✅ Checklist
-
-- [ ] Terminal 1: `npx hardhat node` (running)
-- [ ] Terminal 2: `npx hardhat run scripts/deploy.js --network localhost` (deployed)
-- [ ] Terminal 3: `npm start` in backend/ (running)
-- [ ] Test 1: `curl http://localhost:3000/status` (connected)
-- [ ] Test 2: `node scripts/generateInput.js` (proof generated)
-- [ ] Test 3: Post vote to `/vote` (vote recorded)
-- [ ] Test 4: `curl http://localhost:3000/results` (shows votes)
-- [ ] Test 5: Try duplicate vote (rejected) ✅
-
----
-
-## 🎉 COMPLETE!
-
-Your full-stack ZKP voting system is **fully functional and blockchain-integrated!**
-
-### What You Have:
-✅ ZKP circuit (Circom) - Privacy  
-✅ Proof generation (snarkjs) - Anonymity  
-✅ Backend verification (Express) - Validation  
-✅ Smart contract (Solidity) - Immutability  
-✅ Blockchain storage (Hardhat) - Permanence  
-✅ Double vote prevention - Security  
-
-This is production-ready architecture! 🔥
+| Symptom | Fix |
+| --- | --- |
+| `Cannot connect to RPC` | Start the node: `npm run node` |
+| `No contract at 0x…` | Node was restarted; run `npm run deploy` again (new election) |
+| `REGISTRATION_CLOSED` | Election has left the registration phase; check `npm run election:status` |
+| "credential is not in the voter registry" | Voter did not register before it closed, or the credential was mistyped |
+| `election:open` says the roll changed | A registration or reset happened after publishing; review the new registry and run it again |
+| No registration email | Without `SMTP_HOST` emails are printed in the backend console |
+| `Missing required environment variable PRIVATE_KEY` | `cp backend/.env.example backend/.env` |
+| Startup: config/contract mismatch | `election.config.json` changed after deploy; redeploy |
+| `circom 2.x not found` | Install circom or set `CIRCOM_PATH` |
+| `/admin` says "Admin portal not set up" | `cd backend && npm run admin:set-password`, then restart the backend |
+| Admin portal: "Phase changes are off" | Set `OWNER_PRIVATE_KEY` in `backend/.env` to the deployer's key and restart the backend |
+| Admin portal shows "Server error (404)" | The backend was started before this feature; restart it |

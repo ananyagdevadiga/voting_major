@@ -1,7 +1,9 @@
 pragma circom 2.0.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
 
+// Recomputes a Merkle root from a leaf and its authentication path.
 template MerkleTreeChecker(levels) {
     signal input leaf;
     signal input pathElements[levels];
@@ -42,29 +44,33 @@ template MerkleTreeChecker(levels) {
     root <== hashes[levels];
 }
 
+/*
+ * Proves: "I know a secret whose commitment Poseidon(secret) is a leaf of the
+ * voter tree with this root, this is my nullifier for this election, and I
+ * vote for candidate `vote` in [1, candidateCount]".
+ *
+ * Public signal order (declaration order): root, nullifierHash, electionId,
+ * candidateCount, vote. The commitment is never revealed.
+ */
 template Vote(levels) {
-    signal input secret;
+    // ---------- public ----------
+    signal input root;
+    signal input nullifierHash;
     signal input electionId;
+    signal input candidateCount;
     signal input vote;
 
+    // ---------- private ----------
+    signal input secret;
     signal input pathElements[levels];
     signal input pathIndices[levels];
 
-    signal input root;
-    signal input nullifierHash;
-
-    signal output commitment;
-
-    signal input isVote1;
-    signal input isVote2;
-    signal input isVote3;
-
+    // Commitment stays internal so the proof cannot be linked to a voter.
     component commitmentHasher = Poseidon(1);
     commitmentHasher.inputs[0] <== secret;
-    commitment <== commitmentHasher.out;
 
     component treeChecker = MerkleTreeChecker(levels);
-    treeChecker.leaf <== commitment;
+    treeChecker.leaf <== commitmentHasher.out;
 
     for (var i = 0; i < levels; i++) {
         treeChecker.pathElements[i] <== pathElements[i];
@@ -78,13 +84,20 @@ template Vote(levels) {
     nullifierHasher.inputs[1] <== electionId;
     nullifierHasher.out === nullifierHash;
 
-    isVote1 * (isVote1 - 1) === 0;
-    isVote2 * (isVote2 - 1) === 0;
-    isVote3 * (isVote3 - 1) === 0;
+    // Comparators are only sound for range-checked inputs: both fit in 8 bits.
+    component voteBits = Num2Bits(8);
+    voteBits.in <== vote;
+    component countBits = Num2Bits(8);
+    countBits.in <== candidateCount;
 
-    isVote1 + isVote2 + isVote3 === 1;
+    // 1 <= vote <= candidateCount (up to 255 candidates)
+    component voteAtLeastOne = GreaterEqThan(8);
+    voteAtLeastOne.in[0] <== vote;
+    voteAtLeastOne.in[1] <== 1;
+    voteAtLeastOne.out === 1;
 
-    vote === isVote1 * 1 + isVote2 * 2 + isVote3 * 3;
+    component voteInRange = LessEqThan(8);
+    voteInRange.in[0] <== vote;
+    voteInRange.in[1] <== candidateCount;
+    voteInRange.out === 1;
 }
-
-component main {public [root, nullifierHash, electionId]} = Vote(4);

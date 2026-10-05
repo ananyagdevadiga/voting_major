@@ -1,72 +1,47 @@
-const fs = require("fs");
-const circomlibjs = require("circomlibjs");
+/*
+ * Recomputes every voter's Merkle path in client/public/voterProofData.json
+ * and checks it against the root in data/merkle.json.
+ */
+const { PATHS, readJson, getHasher } = require("./lib/common");
 
 async function main() {
-    const poseidon = await circomlibjs.buildPoseidon();
-    const F = poseidon.F;
+  const { hash } = await getHasher();
+  const merkle = readJson(PATHS.merkle);
+  const proofData = readJson(PATHS.voterProofData);
 
-    const merkle = JSON.parse(
-        fs.readFileSync("./scripts/merkle.json", "utf8")
+  if (proofData.root !== merkle.root) {
+    throw new Error(
+      "voterProofData.json root does not match data/merkle.json. Run: npm run tree:build"
     );
+  }
 
-    if (!merkle.voters || merkle.voters.length === 0) {
-        throw new Error("No voters found in merkle.json");
-    }
+  let valid = 0;
 
-    console.log("\n========== MERKLE TREE CHECK ==========");
-    console.log("Total voters:", merkle.voters.length);
-    console.log("Expected root:", merkle.root);
-    console.log("=======================================\n");
+  for (const voter of proofData.voters) {
+    let node = BigInt(voter.commitment);
 
-    let validCount = 0;
+    voter.pathElements.forEach((sibling, level) => {
+      node =
+        voter.pathIndices[level] === "0"
+          ? hash([node, BigInt(sibling)])
+          : hash([BigInt(sibling), node]);
+    });
 
-    for (const voter of merkle.voters) {
-        let hash = BigInt(voter.commitment);
-
-        console.log(`Checking ${voter.voterId}...`);
-
-        for (let i = 0; i < voter.pathElements.length; i++) {
-            const sibling = BigInt(voter.pathElements[i]);
-            const index = Number(voter.pathIndices[i]);
-
-            let left;
-            let right;
-
-            if (index === 0) {
-                left = hash;
-                right = sibling;
-            } else {
-                left = sibling;
-                right = hash;
-            }
-
-            hash = BigInt(
-                F.toString(poseidon([left, right]))
-            );
-        }
-
-        if (hash.toString() === merkle.root) {
-            console.log(`✅ ${voter.voterId} - VALID`);
-            validCount++;
-        } else {
-            console.log(`❌ ${voter.voterId} - INVALID`);
-            console.log("   Calculated:", hash.toString());
-            console.log("   Expected  :", merkle.root);
-        }
-
-        console.log();
-    }
-
-    console.log("========== FINAL RESULT ==========");
-    console.log(`Valid voters: ${validCount}/${merkle.voters.length}`);
-
-    if (validCount === merkle.voters.length) {
-        console.log("✅ ALL MERKLE PROOFS ARE VALID");
+    if (node.toString() === merkle.root) {
+      valid++;
+      console.log(`OK       ${voter.voterId}`);
     } else {
-        console.log("❌ SOME MERKLE PROOFS ARE INVALID");
+      console.log(`INVALID  ${voter.voterId}`);
     }
+  }
 
-    console.log("==================================\n");
+  console.log(`\nValid Merkle paths: ${valid}/${proofData.voters.length}`);
+  if (valid !== proofData.voters.length) {
+    process.exit(1);
+  }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error("ERROR:", error.message);
+  process.exit(1);
+});

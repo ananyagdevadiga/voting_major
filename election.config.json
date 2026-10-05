@@ -1,0 +1,11 @@
+{
+  "electionId": "1",
+  "name": "Demo Election 2026",
+  "description": "Anonymous election secured with zero-knowledge proofs.",
+  "treeDepth": 10,
+  "candidates": [
+    { "id": 1, "name": "Candidate 1", "party": "Party A" },
+    { "id": 2, "name": "Candidate 2", "party": "Party B" },
+    { "id": 3, "name": "Candidate 3", "party": "Party C" }
+  ]
+}

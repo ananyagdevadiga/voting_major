@@ -1,13 +1,59 @@
 {
-  "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+  "verifierAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   "network": "localhost",
   "chainId": 31337,
-  "deployedAt": "2026-08-29T13:48:45.298Z",
+  "electionId": "1",
+  "candidateCount": 3,
+  "treeDepth": 10,
+  "deployedAt": "2026-10-05T17:57:01.742Z",
   "abi": [
     {
       "type": "constructor",
       "payable": false,
-      "inputs": []
+      "inputs": [
+        {
+          "type": "address",
+          "name": "_verifier"
+        },
+        {
+          "type": "uint256",
+          "name": "_electionId"
+        },
+        {
+          "type": "uint256",
+          "name": "_candidateCount"
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "OwnershipTransferred",
+      "inputs": [
+        {
+          "type": "address",
+          "name": "previousOwner",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "newOwner",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "RegistrationClosed",
+      "inputs": [
+        {
+          "type": "uint256",
+          "name": "timestamp",
+          "indexed": false
+        }
+      ]
     },
     {
       "type": "event",
@@ -34,16 +80,23 @@
     {
       "type": "event",
       "anonymous": false,
-      "name": "VoteRejected",
+      "name": "VotingEnded",
       "inputs": [
         {
-          "type": "string",
-          "name": "reason",
+          "type": "uint256",
+          "name": "timestamp",
           "indexed": false
-        },
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "VotingOpened",
+      "inputs": [
         {
-          "type": "bytes32",
-          "name": "nullifier",
+          "type": "uint256",
+          "name": "merkleRoot",
           "indexed": false
         },
         {
@@ -55,19 +108,69 @@
     },
     {
       "type": "function",
+      "name": "candidateCount",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "function",
       "name": "castVote",
       "constant": false,
       "payable": false,
       "inputs": [
         {
-          "type": "uint256",
-          "name": "_candidate"
+          "type": "uint256[2]",
+          "name": "_pA"
         },
         {
-          "type": "bytes32",
-          "name": "_nullifier"
+          "type": "uint256[2][2]",
+          "name": "_pB"
+        },
+        {
+          "type": "uint256[2]",
+          "name": "_pC"
+        },
+        {
+          "type": "uint256[5]",
+          "name": "_pubSignals"
         }
       ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "closeRegistration",
+      "constant": false,
+      "payable": false,
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "electionId",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "endVoting",
+      "constant": false,
+      "payable": false,
+      "inputs": [],
       "outputs": []
     },
     {
@@ -79,7 +182,8 @@
       "inputs": [],
       "outputs": [
         {
-          "type": "uint256[4]"
+          "type": "uint256[]",
+          "name": "results"
         }
       ]
     },
@@ -134,6 +238,19 @@
     },
     {
       "type": "function",
+      "name": "merkleRoot",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "function",
       "name": "nullifierUsed",
       "constant": true,
       "stateMutability": "view",
@@ -151,6 +268,19 @@
     },
     {
       "type": "function",
+      "name": "openVoting",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "uint256",
+          "name": "_merkleRoot"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
       "name": "owner",
       "constant": true,
       "stateMutability": "view",
@@ -164,11 +294,55 @@
     },
     {
       "type": "function",
-      "name": "resetVotes",
-      "constant": false,
+      "name": "phase",
+      "constant": true,
+      "stateMutability": "view",
       "payable": false,
       "inputs": [],
+      "outputs": [
+        {
+          "type": "uint8"
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "totalVotes",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "transferOwnership",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "address",
+          "name": "_newOwner"
+        }
+      ],
       "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "verifier",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "address"
+        }
+      ]
     },
     {
       "type": "function",
@@ -187,5 +361,6 @@
         }
       ]
     }
-  ]
+  ],
+  "merkleRoot": "18618718136731449750453039552376986166227679034496794551280942626401546259374"
 }

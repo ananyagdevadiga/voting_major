@@ -36,6 +36,79 @@
       "artifacts": [
         "Voting"
       ]
+    },
+    "D:\\Major-project\\voting_major\\contracts\\Voting.sol": {
+      "lastModificationDate": 1790956920693,
+      "contentHash": "4037f96b23abebcb02cc421fa25f242f",
+      "sourceName": "contracts/Voting.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IGroth16Verifier",
+        "Voting"
+      ]
+    },
+    "D:\\Major-project\\voting_major\\contracts\\Verifier.sol": {
+      "lastModificationDate": 1790937391526,
+      "contentHash": "c8bd0cd02ceabd1d534938767e6ad4c3",
+      "sourceName": "contracts/Verifier.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0 <0.9.0"
+      ],
+      "artifacts": [
+        "Groth16Verifier"
+      ]
     }
   }
 }

@@ -1,46 +1,58 @@
-const fs = require("fs");
-const path = require("path");
+/*
+ * Deploys Groth16Verifier + Voting using election.config.json and writes
+ * contractAddress.json (address + ABI + election parameters) for the backend.
+ *
+ * The election starts in the Registration phase. Then:
+ *   npm run election:close-registration   publish the registry for audit
+ *   npm run election:open                 fix the root on-chain, open voting
+ *   npm run election:end                  end the election
+ *
+ * Usage: npx hardhat run scripts/deploy.js --network localhost
+ */
 const hre = require("hardhat");
+const { PATHS, writeJson, loadElectionConfig } = require("./lib/common");
 
 async function main() {
-  console.log("Deploying Voting smart contract...");
+  const config = loadElectionConfig();
+  const candidateCount = config.candidates.length;
+  const network = await hre.ethers.provider.getNetwork();
+
+  console.log(`Deploying to ${hre.network.name} (chainId ${network.chainId})...`);
+
+  const Verifier = await hre.ethers.getContractFactory("Groth16Verifier");
+  const verifier = await Verifier.deploy();
+  await verifier.deployed();
+  console.log("Groth16Verifier:", verifier.address);
 
   const Voting = await hre.ethers.getContractFactory("Voting");
-  const voting = await Voting.deploy();
-
-  console.log("Deployment transaction:", voting.deployTransaction.hash);
-
+  const voting = await Voting.deploy(verifier.address, config.electionId, candidateCount);
   await voting.deployed();
+  console.log("Voting:", voting.address);
 
-  const deployedAddress = voting.address;
-  const abiJson = voting.interface.format(hre.ethers.utils.FormatTypes.json);
-  const abi = JSON.parse(abiJson);
+  const abi = JSON.parse(
+    voting.interface.format(hre.ethers.utils.FormatTypes.json)
+  );
 
-  console.log("Contract deployed successfully");
-  console.log("Contract address:", deployedAddress);
-
-  const contractData = {
-    address: deployedAddress,
-    network: "localhost",
-    chainId: 31337,
+  writeJson(PATHS.contractInfo, {
+    address: voting.address,
+    verifierAddress: verifier.address,
+    network: hre.network.name,
+    chainId: network.chainId,
+    electionId: String(config.electionId),
+    candidateCount,
+    treeDepth: config.treeDepth,
     deployedAt: new Date().toISOString(),
     abi
-  };
+  });
 
-  const contractPath = path.join(__dirname, "../contractAddress.json");
-  fs.writeFileSync(contractPath, JSON.stringify(contractData, null, 2));
-  console.log("Contract data saved to contractAddress.json");
-
-  const abiPath = path.join(__dirname, "../contracts/Voting.abi.json");
-  fs.writeFileSync(abiPath, JSON.stringify(abi, null, 2));
-  console.log("Contract ABI saved to contracts/Voting.abi.json");
-
-  console.log("Deployment complete");
+  console.log("\nSaved contractAddress.json");
+  console.log(`Election ${config.electionId}: ${candidateCount} candidates`);
+  console.log("Phase: registration — voters can now register at /register");
 }
 
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error("Deployment failed:", error);
+    console.error("Deployment failed:", error.message);
     process.exit(1);
   });

@@ -1,81 +1,93 @@
-const fs = require("fs");
+/*
+ * Generates a real Groth16 vote proof from the command line (useful for
+ * testing the backend without the web client).
+ *
+ * Usage:
+ *   node scripts/generateProof.js <credential> <candidateId>
+ *   (<credential> is the one the voter saved at /register)
+ *
+ * Writes build/proof.json, build/public.json and build/vote-request.json —
+ * the latter is the exact body for POST /vote.
+ */
 const path = require("path");
-const { exec } = require("child_process");
-const { promisify } = require("util");
+const snarkjs = require("snarkjs");
+const {
+  PATHS,
+  readJson,
+  writeJson,
+  loadElectionConfig,
+  secretToBigInt,
+  getHasher
+} = require("./lib/common");
 
-const execAsync = promisify(exec);
+function parseArgs() {
+  const [secretKey, candidateArg] = process.argv.slice(2);
 
-async function main() {
-  console.log("\n" + "=".repeat(60));
-  console.log("🔐 GENERATING ZERO-KNOWLEDGE PROOF");
-  console.log("=".repeat(60) + "\n");
-
-  try {
-    const buildDir = path.join(__dirname, "../build");
-    const inputFile = path.join(__dirname, "../inputs/input.json");
-    const wasmFile = path.join(buildDir, "Vote_js/Vote.wasm");
-    const zkey = path.join(buildDir, "circuit_final.zkey");
-
-    console.log("📋 Checking required files...");
-    if (!fs.existsSync(inputFile)) {
-      throw new Error("input.json not found. Run: node scripts/generateInput.js");
-    }
-    if (!fs.existsSync(wasmFile)) {
-      throw new Error("Vote.wasm not found. Build the circuit first.");
-    }
-
-    console.log("✅ All files present\n");
-
-    // For demo: Create a mock proof since full snarkjs setup is complex
-    console.log("⏳ Generating witness...");
-    const { execSync } = require("child_process");
-    
-    try {
-      execSync(`cd "${buildDir}/Vote_js" && node generate_witness.js "${inputFile}" witness.wtns`, {
-        stdio: "pipe"
-      });
-      console.log("✅ Witness generated\n");
-    } catch (e) {
-      console.log("⚠️  Witness generation skipped, creating demo proof\n");
-    }
-
-    // Create demo proof files for testing
-    const input = JSON.parse(fs.readFileSync(inputFile, "utf-8"));
-    
-    const proofData = {
-      proof: {
-        a: ["1", "2"],
-        b: [["3", "4"], ["5", "6"]],
-        c: ["7", "8"]
-      },
-      publicSignals: [
-        input.root,
-        input.nullifierHash,
-        input.vote
-      ]
-    };
-
-    const proofPath = path.join(buildDir, "proof.json");
-    const publicPath = path.join(buildDir, "public.json");
-
-    fs.writeFileSync(proofPath, JSON.stringify(proofData, null, 2));
-    fs.writeFileSync(publicPath, JSON.stringify(proofData.publicSignals, null, 2));
-
-    console.log("✅ Proof generated!");
-    console.log("📁 Files created:");
-    console.log(`   - ${proofPath}`);
-    console.log(`   - ${publicPath}`);
-    console.log("\n📊 Public Signals:");
-    console.log(`   - Root: ${proofData.publicSignals[0]}`);
-    console.log(`   - Nullifier: ${proofData.publicSignals[1]}`);
-    console.log(`   - Vote: ${proofData.publicSignals[2]}`);
-    console.log("\n✨ Ready to submit vote to backend!\n");
-
-  } catch (error) {
-    console.error("\n❌ Proof generation failed!");
-    console.error("Error:", error.message);
-    process.exit(1);
+  if (!secretKey || !candidateArg) {
+    throw new Error("Usage: node scripts/generateProof.js <credential> <candidateId>");
   }
+
+  return { secretKey, candidate: Number(candidateArg) };
 }
 
-main();
+async function main() {
+  const { secretKey, candidate } = parseArgs();
+  const config = loadElectionConfig();
+  const candidateCount = config.candidates.length;
+
+  if (!Number.isInteger(candidate) || candidate < 1 || candidate > candidateCount) {
+    throw new Error(`Candidate must be an integer between 1 and ${candidateCount}`);
+  }
+
+  const hasher = await getHasher();
+  const proofData = readJson(PATHS.voterProofData);
+  const commitment = hasher.commitment(secretKey).toString();
+  const voter = proofData.voters.find((v) => v.commitment === commitment);
+
+  if (!voter) {
+    throw new Error("This secret key does not belong to any registered voter");
+  }
+
+  const input = {
+    root: proofData.root,
+    nullifierHash: hasher.nullifier(secretKey, config.electionId).toString(),
+    electionId: String(config.electionId),
+    candidateCount: String(candidateCount),
+    vote: String(candidate),
+    secret: secretToBigInt(secretKey).toString(),
+    pathElements: voter.pathElements,
+    pathIndices: voter.pathIndices
+  };
+
+  console.log(`Generating proof for ${voter.voterId}, candidate ${candidate}...`);
+
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    input,
+    PATHS.wasm,
+    PATHS.zkey
+  );
+
+  const ok = await snarkjs.groth16.verify(readJson(PATHS.vkey), publicSignals, proof);
+  if (!ok) {
+    throw new Error("Generated proof failed local verification");
+  }
+
+  writeJson(path.join(PATHS.buildDir, "proof.json"), proof);
+  writeJson(path.join(PATHS.buildDir, "public.json"), publicSignals);
+  writeJson(path.join(PATHS.buildDir, "vote-request.json"), { proof, publicSignals });
+
+  console.log("\nProof verified locally.");
+  console.log("Public signals [root, nullifierHash, electionId, candidateCount, vote]:");
+  console.log(publicSignals);
+  console.log("\nSubmit with:");
+  console.log(
+    '  curl -X POST http://localhost:3000/vote -H "Content-Type: application/json" -d @build/vote-request.json'
+  );
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error("ERROR:", error.message);
+    process.exit(1);
+  });

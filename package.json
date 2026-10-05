@@ -3,18 +3,34 @@
   "version": "1.0.0",
   "description": "Zero-Knowledge Proof based anonymous voting system with blockchain integration",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "circuit:build": "node scripts/buildCircuit.js",
+    "voter:add": "node scripts/addVoter.js",
+    "voter:reset": "node scripts/resetVoter.js",
+    "tree:build": "node scripts/buildMerkleTree.js",
+    "tree:check": "node scripts/checkMerkle.js",
+    "proof:generate": "node scripts/generateProof.js",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "check": "hardhat run scripts/systemCheck.js",
     "node": "hardhat node",
     "deploy": "hardhat run scripts/deploy.js --network localhost",
-    "compile": "hardhat compile"
+    "election:close-registration": "hardhat run scripts/closeRegistration.js --network localhost",
+    "election:open": "hardhat run scripts/openVoting.js --network localhost",
+    "election:end": "hardhat run scripts/endVoting.js --network localhost",
+    "election:status": "hardhat run scripts/electionStatus.js --network localhost",
+    "setup": "npm run circuit:build && npm run compile"
   },
   "dependencies": {
     "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^1.0.6",
     "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "chai": "^4.5.0",
+    "dotenv": "^16.6.1",
     "ethers": "^5.7.2",
-    "hardhat": "^2.22.5"
+    "hardhat": "^2.22.5",
+    "snarkjs": "^0.7.6"
   }
 }

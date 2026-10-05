@@ -1,45 +1,42 @@
 import { useEffect, useState } from "react";
-import { Home } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { fetchResults } from "../lib/api";
+import Layout from "../components/Layout";
+import { Card, Notice, ResultsList, Spinner } from "../components/ui";
 
 function Results() {
   const [results, setResults] = useState(null);
-  const navigate = useNavigate();
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchResults = async () => {
-      const res = await fetch("http://localhost:3000/results");
-      const data = await res.json();
-      setResults(data);
-    };
-
-    fetchResults();
+    fetchResults()
+      .then((data) => {
+        if (data.success === false) {
+          throw new Error(data.message || "Failed to fetch results");
+        }
+        setResults(data);
+      })
+      .catch((err) => setError(err.message));
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
-      <div className="w-full max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl">
-        <h1 className="text-3xl font-bold">Election Results</h1>
-
-        {results ? (
-          <div className="mt-6 text-left space-y-2">
-            <p>Candidate 1: {results.candidate1}</p>
-            <p>Candidate 2: {results.candidate2}</p>
-            <p>Candidate 3: {results.candidate3}</p>
-            <p className="font-bold mt-3">Total Votes: {results.total}</p>
-          </div>
-        ) : (
-          <p className="mt-6">Loading results...</p>
-        )}
-
-        <button
-          onClick={() => navigate("/")}
-          className="mt-8 rounded-xl bg-blue-700 px-6 py-3 text-white"
-        >
-          <Home size={18} /> Back to Home
-        </button>
+    <Layout width="medium">
+      <div className="mb-6 px-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Results</h1>
+        <p className="mt-1.5 text-sm text-slate-500">Live tally from the smart contract.</p>
       </div>
-    </div>
+
+      <Card>
+        {error ? (
+          <Notice tone="error" title="Results are unavailable">
+            {error}
+          </Notice>
+        ) : results ? (
+          <ResultsList candidates={results.candidates} total={results.total} />
+        ) : (
+          <Spinner label="Reading the tally…" />
+        )}
+      </Card>
+    </Layout>
   );
 }
 
